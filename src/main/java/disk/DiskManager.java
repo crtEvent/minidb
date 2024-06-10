@@ -43,7 +43,7 @@ public class DiskManager {
     }
 
     /**
-     * 페이지 데이터를 Read한다.
+     * 페이지 데이터를 Read한다. 매개변수로 넣어준 data에 읽어온 데이터를 덮어씌워 준다
      * @param pageId
      * @param data
      * @throws IOException

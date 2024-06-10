@@ -8,9 +8,9 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class BufferPoolManager {
-    private DiskManager disk;
-    private BufferPool pool;
-    private Map<PageId, BufferId> pageTable;
+    private final DiskManager disk;
+    private final BufferPool pool;
+    private final Map<PageId, BufferId> pageTable;
 
     public BufferPoolManager(DiskManager disk, BufferPool pool) {
         this.disk = disk;
@@ -18,32 +18,40 @@ public class BufferPoolManager {
         this.pageTable = new HashMap<>();
     }
 
+    /**
+     * 페이지 할당
+     * @param pageId
+     * @return
+     * @throws Exception
+     */
     public synchronized AtomicReference<Buffer> fetchPage(PageId pageId) throws Exception {
+        // Page가 BufferPool에 있는 경우 해당 Buffer 할당
         if (pageTable.containsKey(pageId)) {
             BufferId bufferId = pageTable.get(pageId);
-            Frame frame = pool.getFrame(bufferId);
-            frame.usageCount += 1;
-            return new AtomicReference<>(frame.buffer);
+            BufferFrame bufferFrame = pool.getFrame(bufferId);
+            bufferFrame.usageCount += 1;
+            return new AtomicReference<>(bufferFrame.buffer);
         }
 
-        BufferId bufferId = pool.evict()
+        // Page가 BufferPool에 없는 경우
+        BufferId evictBufferId = pool.evict()
             .orElseThrow(() -> new RuntimeException("No free buffer available"));
-        Frame frame = pool.getFrame(bufferId);
-        PageId evictPageId = frame.buffer.pageId;
+        BufferFrame evictBufferFrame = pool.getFrame(evictBufferId);
+        PageId evictPageId = evictBufferFrame.buffer.pageId;
 
-        Buffer buffer = frame.buffer;
-        if (buffer.isDirty.get()) {
-            disk.writePageData(evictPageId, buffer.page.getData());
+        Buffer evictBuffer = evictBufferFrame.buffer;
+        if (evictBuffer.isDirty()) {
+            disk.writePageData(evictPageId, evictBuffer.page.getData());
         }
 
-        buffer.pageId = pageId;
-        buffer.isDirty.set(false);
-        disk.readPageData(pageId, buffer.page.getData());
-        frame.usageCount = 1;
+        evictBuffer.pageId = pageId;
+        evictBuffer.toClean();
+        disk.readPageData(pageId, evictBuffer.page.getData());
+        evictBufferFrame.usageCount = 1;
 
-        AtomicReference<Buffer> page = new AtomicReference<>(buffer);
+        AtomicReference<Buffer> page = new AtomicReference<>(evictBuffer);
         pageTable.remove(evictPageId);
-        pageTable.put(pageId, bufferId);
+        pageTable.put(pageId, evictBufferId);
 
         return page;
     }
@@ -51,18 +59,18 @@ public class BufferPoolManager {
     public synchronized AtomicReference<Buffer> createPage() throws Exception {
         BufferId bufferId = pool.evict()
             .orElseThrow(() -> new RuntimeException("No free buffer available"));
-        Frame frame = pool.getFrame(bufferId);
-        PageId evictPageId = frame.buffer.pageId;
+        BufferFrame bufferFrame = pool.getFrame(bufferId);
+        PageId evictPageId = bufferFrame.buffer.pageId;
 
-        Buffer buffer = frame.buffer;
-        if (buffer.isDirty.get()) {
+        Buffer buffer = bufferFrame.buffer;
+        if (buffer.isDirty()) {
             disk.writePageData(evictPageId, buffer.page.getData());
         }
 
         PageId pageId = disk.allocatePage();
         buffer = new Buffer(pageId, new Page(), true);
-        frame.buffer = (buffer);
-        frame.usageCount = 1;
+        bufferFrame.buffer = (buffer);
+        bufferFrame.usageCount = 1;
 
         AtomicReference<Buffer> page = new AtomicReference<>(buffer);
         pageTable.remove(evictPageId);
@@ -75,12 +83,12 @@ public class BufferPoolManager {
         for (Map.Entry<PageId, BufferId> entry : pageTable.entrySet()) {
             PageId pageId = entry.getKey();
             BufferId bufferId = entry.getValue();
-            Frame frame = pool.getFrame(bufferId);
-            Buffer buffer = frame.buffer;
+            BufferFrame bufferFrame = pool.getFrame(bufferId);
+            Buffer buffer = bufferFrame.buffer;
 
-            if (buffer.isDirty.get()) {
+            if (buffer.isDirty()) {
                 disk.writePageData(pageId, buffer.page.getData());
-                buffer.isDirty.set(false);
+                buffer.toClean();
             }
         }
 

@@ -5,21 +5,21 @@ import java.util.List;
 import java.util.Optional;
 
 public class BufferPool {
-    public List<Frame> buffers;
+    public List<BufferFrame> buffers;
     public BufferId nextVictimId;
 
     public BufferPool(int poolSize) {
         this.buffers = new ArrayList<>(poolSize);
         for (int i = 0; i < poolSize; i++) {
-            this.buffers.add(new Frame(0, null));  // Initialize frames with default values
+            this.buffers.add(new BufferFrame(0, null));  // Initialize frames with default values
         }
         this.nextVictimId = new BufferId(0);  // Initialize nextVictimId
     }
 
     /**
-     * 삭제할 버퍼를 결정해서, 그 버퍼 ID 를 반환한다.
-     * 만약 모든 버퍼가 할당된 상태이고 삭제할 수 있는 버퍼가 하나도 없는 경우에는 Optional.empty()를 반환한다.
-     * @return 삭제할 버퍼의 ID
+     * Buffer Pool에서 삭제할 Buffer를 결정해서, 해당 Buffer의 ID 를 반환한다.
+     * 만약 모든 Buffer가 할당된 상태이고 삭제할 수 있는 Buffer가 하나도 없는 경우에는 Optional.empty()를 반환한다.
+     * @return 삭제할 Buffer의 ID
      */
     public Optional<BufferId> evict() {
         int poolSize = this.buffers.size();
@@ -28,15 +28,15 @@ public class BufferPool {
 
         while (true) {
             BufferId nextVictimId = this.nextVictimId;
-            Frame frame = this.buffers.get(nextVictimId.id());
+            BufferFrame bufferFrame = this.buffers.get(nextVictimId.id());
 
-            if (frame.usageCount == 0) {
+            if (bufferFrame.usageCount == 0) {
                 victimId = nextVictimId;
                 break;
             }
 
-            if (frame.buffer != null) {
-                frame.usageCount -= 1;
+            if (bufferFrame.buffer != null) {
+                bufferFrame.usageCount -= 1;
                 consecutivePinned = 0;
             } else {
                 consecutivePinned += 1;
@@ -51,11 +51,11 @@ public class BufferPool {
         return Optional.of(victimId);
     }
 
-    public Frame getFrame(BufferId bufferId) {
+    public BufferFrame getFrame(BufferId bufferId) {
         return this.buffers.get(bufferId.id());
     }
 
-    public void setFrame(BufferId bufferId, Frame frame) {
-        this.buffers.set(bufferId.id(), frame);
+    public void setFrame(BufferId bufferId, BufferFrame bufferFrame) {
+        this.buffers.set(bufferId.id(), bufferFrame);
     }
 }

@@ -5,12 +5,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Buffer {
     public PageId pageId;
-    public Page page;
-    public AtomicBoolean isDirty;
+    public final Page page;
+    private final AtomicBoolean dirty;
 
     public Buffer(PageId pageId, Page page, boolean isDirty) {
         this.pageId = pageId;
         this.page = page;
-        this.isDirty = new AtomicBoolean(isDirty);
+        this.dirty = new AtomicBoolean(isDirty);
     }
+
+    public boolean isDirty() {
+        return dirty.get();
+    }
+
+    public void toClean() {
+        dirty.set(false);
+    }
+
 }
